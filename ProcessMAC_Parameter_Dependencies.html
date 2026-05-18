@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProcessMAC — Parameter Dependency Flow</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --ext-fill: #E6F1FB; --ext-stroke: #185FA5; --ext-text: #0C447C;
+    --dt-fill: #E1F5EE;  --dt-stroke: #0F6E56; --dt-text: #085041;
+    --dis-fill: #FAEEDA; --dis-stroke: #854F0B; --dis-text: #633806;
+    --kpi-fill: #FAECE7; --kpi-stroke: #993C1D; --kpi-text: #712B13;
+    --root-fill: #F1EFE8; --root-stroke: #5F5E5A; --root-text: #2C2C2A;
+    --bg: #ffffff;
+    --surface: #F8F7F4;
+    --border: #D3D1C7;
+    --text-primary: #1a1a18;
+    --text-secondary: #5F5E5A;
+    --font: 'IBM Plex Sans', sans-serif;
+    --mono: 'IBM Plex Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text-primary);
+    padding: 40px 32px 60px;
+    max-width: 100%;
+    margin: 0 auto;
+  }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 20px;
+    margin-bottom: 28px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .title-block h1 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    color: var(--text-primary);
+  }
+  .title-block p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    font-family: var(--mono);
+  }
+
+  .controls {
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  }
+  .filter-btn {
+    font-size: 12px; font-family: var(--font);
+    padding: 5px 12px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--bg);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-weight: 400;
+  }
+  .filter-btn:hover { background: var(--surface); color: var(--text-primary); }
+  .filter-btn.active { background: var(--text-primary); color: #fff; border-color: var(--text-primary); }
+
+  .print-btn {
+    font-size: 12px; font-family: var(--font);
+    padding: 5px 14px;
+    border: 1px solid var(--ext-stroke);
+    border-radius: 20px;
+    background: var(--ext-fill);
+    color: var(--ext-text);
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .print-btn:hover { background: #B5D4F4; }
+
+  .legend {
+    display: flex; gap: 20px; flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .leg-item { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-secondary); }
+  .leg-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+
+  .tier-legend {
+    display: flex; gap: 0; flex-wrap: wrap;
+    margin-bottom: 24px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .tier-item {
+    flex: 1; min-width: 140px;
+    padding: 8px 12px;
+    border-right: 1px solid var(--border);
+    font-size: 11px;
+  }
+  .tier-item:last-child { border-right: none; }
+  .tier-label { font-weight: 600; font-family: var(--mono); color: var(--text-primary); font-size: 11px; }
+  .tier-desc { color: var(--text-secondary); margin-top: 2px; }
+
+  .svg-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+  svg { display: block; font-family: var(--font); }
+
+  .info-panel {
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    min-height: 44px;
+    line-height: 1.6;
+  }
+  .info-panel strong { color: var(--text-primary); font-weight: 600; }
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    margin: 2px;
+    font-family: var(--mono);
+  }
+  .tag-up { background: #E6F1FB; color: #0C447C; }
+  .tag-down { background: #FAECE7; color: #712B13; }
+
+  footer {
+    margin-top: 40px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-family: var(--mono);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  @media print {
+    body { padding: 20px; max-width: none; }
+    .controls, .print-btn, .info-panel, .filter-btn { display: none !important; }
+    .legend, .tier-legend { break-inside: avoid; }
+    svg { break-inside: avoid; }
+    header { break-after: avoid; }
+    footer { position: fixed; bottom: 0; width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-block">
+    <h1>Parameter Dependency Flow</h1>
+    <p>ProcessMAC SEP · Solvent Extraction Plant · 38 parameters · 6 dependency tiers</p>
+  </div>
+  <div class="controls">
+    <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+    <button class="filter-btn" onclick="setFilter('extraction',this)">Extraction</button>
+    <button class="filter-btn" onclick="setFilter('dt',this)">DT</button>
+    <button class="filter-btn" onclick="setFilter('distillation',this)">Distillation</button>
+    <button class="filter-btn" onclick="setFilter('kpi',this)">Plant KPIs</button>
+    <button class="filter-btn" onclick="setFilter('roots',this)">Root causes</button>
+    <button class="print-btn" onclick="window.print()">⬇ Save as PDF</button>
+  </div>
+</header>
+
+<div class="legend">
+  <div class="leg-item"><div class="leg-dot" style="background:#185FA5"></div>Extraction</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#0F6E56"></div>DT (Desolventiser-Toaster)</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#854F0B"></div>Distillation</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#993C1D"></div>Plant KPIs</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#5F5E5A;border-radius:50%"></div>Root parameter (no upstream)</div>
+  <div class="leg-item">
+    <svg width="28" height="10"><line x1="2" y1="5" x2="20" y2="5" stroke="#3B8BD4" stroke-width="2"/><polygon points="20,2 26,5 20,8" fill="#3B8BD4"/></svg>
+    Upstream influence
+  </div>
+  <div class="leg-item">
+    <svg width="28" height="10"><line x1="2" y1="5" x2="20" y2="5" stroke="#D85A30" stroke-width="2"/><polygon points="20,2 26,5 20,8" fill="#D85A30"/></svg>
+    Downstream effect
+  </div>
+</div>
+
+<div class="tier-legend">
+  <div class="tier-item"><div class="tier-label">Tier 0</div><div class="tier-desc">Root / Controllable — no upstream dependencies</div></div>
+  <div class="tier-item"><div class="tier-label">Tier 1</div><div class="tier-desc">First-order derived</div></div>
+  <div class="tier-item"><div class="tier-label">Tier 2</div><div class="tier-desc">Second-order derived</div></div>
+  <div class="tier-item"><div class="tier-label">Tier 3</div><div class="tier-desc">Third-order derived</div></div>
+  <div class="tier-item"><div class="tier-label">Tier 4</div><div class="tier-desc">Fourth-order derived</div></div>
+  <div class="tier-item"><div class="tier-label">Tier 5</div><div class="tier-desc">Terminal outputs — economiser &amp; condenser</div></div>
+</div>
+
+<div class="svg-wrap">
+  <svg id="flowSvg" width="100%" viewBox="0 0 1040 1080"></svg>
+</div>
+
+<div class="info-panel" id="infoPanel">
+  Click any parameter node to trace its upstream causes and downstream effects.
+</div>
+
+<footer>
+  <span>ProcessMAC SEP — Parameter Dependency Map</span>
+  <span>Generated: May 2026 · Click nodes to explore · Print / Save as PDF</span>
+</footer>
+
+<script>
+// ─── NODES — sourced directly from "Dependency of Parameters" sheet ───────────
+// Tier assignment: 0 = root (no upstream), higher = longest upstream chain
+const nodes = [
+  // ── Tier 0: Root / Controllable — no upstream dependencies ──────────────────
+  { id: 'extSpeed',    label: 'Extractor Speed',           area: 'extraction',   tier: 0 },
+  { id: 'steamFlow',   label: 'Steam Flow Rate',            area: 'dt',           tier: 0 },
+  { id: 'hexTemp',     label: 'Hexane Temperature',         area: 'extraction',   tier: 0 },
+  { id: 'hexLeak1',    label: 'Hexane Leak 1',              area: 'extraction',   tier: 0 },
+  { id: 'totalSteam',  label: 'Total Steam',                area: 'kpi',          tier: 0 }, // FIX: root, no deps in sheet
+  { id: 'condPump',    label: 'Condensate Pump Pressure',   area: 'dt',           tier: 0 },
+  { id: 'condRec',     label: 'Condensate Recovery',        area: 'dt',           tier: 0 },
+  { id: 'vac1',        label: 'Vacuum 1 Pressure',          area: 'distillation', tier: 0 },
+  { id: 'vac2',        label: 'Vacuum 2 Pressure',          area: 'distillation', tier: 0 },
+  { id: 'vac3',        label: 'Vacuum 3 Pressure',          area: 'distillation', tier: 0 },
+  { id: 'vac4',        label: 'Vacuum 4 Pressure',          area: 'distillation', tier: 0 },
+  { id: 'condInlet',   label: 'Condenser In Water Temp',    area: 'distillation', tier: 0 },
+
+  // ── Tier 1: Depend only on Tier-0 roots ──────────────────────────────────────
+  { id: 'hexFlow',     label: 'Hexane Flow Rate',           area: 'extraction',   tier: 1 }, // ← Extractor Speed
+  { id: 'misFlow',     label: 'Miscella Flow Rate',         area: 'extraction',   tier: 1 }, // ← Extractor Speed
+  { id: 'dtSpeed',     label: 'DT Speed',                   area: 'dt',           tier: 1 }, // ← Extractor Speed
+  { id: 'openSteam',   label: 'Open Steam Pressure',        area: 'dt',           tier: 1 }, // ← Steam Flow Rate
+  { id: 'jacketSteam', label: 'Jacket Steam Pressure',      area: 'dt',           tier: 1 }, // ← Steam Flow Rate
+  { id: 'distHeader',  label: 'Distillation Header Press',  area: 'distillation', tier: 1 }, // ← Steam Flow Rate
+  { id: 'production',  label: 'Production',                 area: 'kpi',          tier: 1 }, // ← Extractor Speed
+
+  // ── Tier 2: Depend on Tier-0 + Tier-1 ────────────────────────────────────────
+  { id: 'compNoStm',   label: 'Compartment Temp (no open steam)', area: 'dt',    tier: 2 }, // ← steamFlow, jacketSteam, dtSpeed
+  { id: 'compStm',     label: 'Compartment Temp (w/ open steam)', area: 'dt',    tier: 2 }, // ← steamFlow, openSteam, jacketSteam, dtSpeed
+  { id: 'hexDuctT',    label: 'Hexane Duct Temperature',    area: 'dt',           tier: 2 }, // ← steamFlow, openSteam, jacketSteam, dtSpeed
+  { id: 'hexDuctV',    label: 'Hexane Duct Vacuum Pressure',area: 'dt',           tier: 2 }, // ← openSteam
+  { id: 'hexLeak2',    label: 'Hexane Leak 2',              area: 'dt',           tier: 2 }, // ← openSteam, dtSpeed
+  { id: 'heater1',     label: 'Heater 1 Temperature',       area: 'distillation', tier: 2 }, // ← distHeader, misFlow
+  { id: 'heater2',     label: 'Heater 2 Temperature',       area: 'distillation', tier: 2 }, // ← distHeader, misFlow
+  { id: 'heater3',     label: 'Heater 3 Temperature',       area: 'distillation', tier: 2 }, // ← distHeader, misFlow
+  { id: 'stripper',    label: 'Stripper Temperature',       area: 'distillation', tier: 2 }, // ← distHeader, misFlow
+  { id: 'whrb',        label: 'WHRB Inlet Temperature',     area: 'distillation', tier: 2 }, // ← distHeader
+  { id: 'ssc',         label: 'SSC',                        area: 'kpi',          tier: 2 }, // ← totalSteam, production
+
+  // ── Tier 3: Depend on Tier-2 ──────────────────────────────────────────────────
+  { id: 'docTemp',     label: 'DOC Temperature',            area: 'dt',           tier: 3 }, // ← compNoStm, compStm
+  { id: 'hexDuctEconIn',label:'Economiser In Hexane Temp',  area: 'distillation', tier: 3 }, // ← hexDuctT
+  { id: 'hexLeak3',    label: 'Hexane Leak 3',              area: 'distillation', tier: 3 }, // ← hexFlow, misFlow, stripper
+  { id: 'savings',     label: 'Savings',                    area: 'kpi',          tier: 3 }, // ← SSC
+
+  // ── Tier 4: Depend on Tier-3 ──────────────────────────────────────────────────
+  { id: 'econInMisc',  label: 'Economiser In Miscella Temp', area: 'distillation', tier: 4 }, // ← econInHex, hexFlow, misFlow
+  { id: 'econOutMisc', label: 'Economiser Out Miscella Temp',area: 'distillation', tier: 4 }, // ← econInHex
+  { id: 'hexLossKpi',  label: 'Hexane Loss',                 area: 'kpi',          tier: 4 }, // ← hexLeak1, hexLeak2, hexLeak3
+
+  // ── Tier 5: Terminal outputs ───────────────────────────────────────────────────
+  { id: 'econOutHex',  label: 'Economiser Out Hexane Temp',  area: 'distillation', tier: 5 }, // ← econInMisc
+  { id: 'condOut',     label: 'Condenser Out Water Temp',    area: 'distillation', tier: 5 }, // ← econOutHex
+];
+
+// ─── EDGES — exact as per "Dependent Parameter" column in the sheet ────────────
+const edges = [
+  // Extractor Speed fan-out
+  {from:'extSpeed',   to:'hexFlow'},
+  {from:'extSpeed',   to:'misFlow'},
+  {from:'extSpeed',   to:'dtSpeed'},
+  {from:'extSpeed',   to:'production'},
+
+  // Steam Flow Rate fan-out
+  {from:'steamFlow',  to:'openSteam'},
+  {from:'steamFlow',  to:'jacketSteam'},
+  {from:'steamFlow',  to:'distHeader'},
+  {from:'steamFlow',  to:'compNoStm'},    // "Steam flow rate" listed as dep of compNoStm
+  {from:'steamFlow',  to:'compStm'},      // "Steam flow rate" listed as dep of compStm
+  {from:'steamFlow',  to:'hexDuctT'},     // "Steam flow rate" listed as dep of hexDuctT
+
+  // Compartment Temp (w/o Open Steam): steamFlow, jacketSteam, dtSpeed
+  {from:'jacketSteam',to:'compNoStm'},
+  {from:'dtSpeed',    to:'compNoStm'},
+
+  // Compartment Temp (w/ Open Steam): steamFlow, openSteam, jacketSteam, dtSpeed
+  {from:'openSteam',  to:'compStm'},
+  {from:'jacketSteam',to:'compStm'},
+  {from:'dtSpeed',    to:'compStm'},
+
+  // Hexane Duct Temperature: steamFlow, openSteam, jacketSteam, dtSpeed
+  {from:'openSteam',  to:'hexDuctT'},
+  {from:'jacketSteam',to:'hexDuctT'},
+  {from:'dtSpeed',    to:'hexDuctT'},
+
+  // Hexane Duct Vacuum Pressure: openSteam
+  {from:'openSteam',  to:'hexDuctV'},
+
+  // Hexane Leak 2: Open steam Pressure, DT Speed
+  {from:'openSteam',  to:'hexLeak2'},
+  {from:'dtSpeed',    to:'hexLeak2'},
+
+  // DOC Temperature: Compartment 1-9 Temperature (both types)
+  {from:'compNoStm',  to:'docTemp'},
+  {from:'compStm',    to:'docTemp'},
+
+  // Distillation section
+  {from:'distHeader', to:'heater1'},  {from:'misFlow',to:'heater1'},
+  {from:'distHeader', to:'heater2'},  {from:'misFlow',to:'heater2'},
+  {from:'distHeader', to:'heater3'},  {from:'misFlow',to:'heater3'},
+  {from:'distHeader', to:'stripper'}, {from:'misFlow',to:'stripper'},
+  {from:'distHeader', to:'whrb'},
+
+  // KPI chain
+  {from:'totalSteam', to:'ssc'},
+  {from:'production', to:'ssc'},
+  {from:'ssc',        to:'savings'},
+
+  // Economiser chain — CORRECTED per sheet:
+  // econInHex ← hexDuctT
+  {from:'hexDuctT',   to:'hexDuctEconIn'},
+  // econInMisc ← econInHex, hexFlow, misFlow
+  {from:'hexDuctEconIn',to:'econInMisc'},
+  {from:'hexFlow',    to:'econInMisc'},
+  {from:'misFlow',    to:'econInMisc'},
+  // econOutHex ← econInMisc  (FIX: sheet says "Economiser inlet Miscella Temperature")
+  {from:'econInMisc', to:'econOutHex'},
+  // econOutMisc ← econInHex  (FIX: sheet says "Economiser inlet Hexane Temperature")
+  {from:'hexDuctEconIn',to:'econOutMisc'},
+  // condOut ← econOutHex
+  {from:'econOutHex', to:'condOut'},
+
+  // Hexane Leak 3: hexFlow, misFlow, stripper
+  {from:'hexFlow',    to:'hexLeak3'},
+  {from:'misFlow',    to:'hexLeak3'},
+  {from:'stripper',   to:'hexLeak3'},
+
+  // Hexane Loss ← hexLeak1, hexLeak2, hexLeak3 (FIX: added hexLeak3)
+  {from:'hexLeak1',   to:'hexLossKpi'},
+  {from:'hexLeak2',   to:'hexLossKpi'},
+  {from:'hexLeak3',   to:'hexLossKpi'},
+];
+
+const COLORS = {
+  extraction:   {fill:'#E6F1FB',stroke:'#185FA5',text:'#0C447C'},
+  dt:           {fill:'#E1F5EE',stroke:'#0F6E56',text:'#085041'},
+  distillation: {fill:'#FAEEDA',stroke:'#854F0B',text:'#633806'},
+  kpi:          {fill:'#FAECE7',stroke:'#993C1D',text:'#712B13'},
+};
+
+// Layout constants — node height fixed, width computed per tier
+const NH = 42, HGAP = 14, VGAP = 130;
+const PADDING = 40; // left/right margin inside SVG
+
+const tierLabels = {
+  0:'Tier 0 — Root / Controllable inputs (no upstream)',
+  1:'Tier 1 — First-order derived',
+  2:'Tier 2 — Second-order derived',
+  3:'Tier 3 — Third-order derived',
+  4:'Tier 4 — Fourth-order derived',
+  5:'Tier 5 — Terminal outputs',
+};
+
+// SVG width is wide enough to fit the largest tier comfortably
+// Tier 0 has 11 nodes — at min 160px each + 14px gaps = 11*160 + 10*14 = 1900px
+const SVG_W = 2000;
+
+function computeLayout(visNodes) {
+  const byTier = {};
+  visNodes.forEach(n => { if(!byTier[n.tier]) byTier[n.tier]=[]; byTier[n.tier].push(n); });
+
+  // Calculate Y positions dynamically
+  const tierYMap = {};
+  let curY = 60;
+  [0,1,2,3,4,5].forEach(t => {
+    if (byTier[t]) { tierYMap[t] = curY; curY += NH + VGAP; }
+  });
+
+  const pos = {};
+  Object.entries(byTier).forEach(([t, arr]) => {
+    // Node width: fill available space evenly, min 160px, MAX 220px
+    const availW = SVG_W - 2 * PADDING;
+    const NW = Math.min(220, Math.max(160, Math.floor((availW - (arr.length - 1) * HGAP) / arr.length)));
+    const total = arr.length * NW + (arr.length - 1) * HGAP;
+    const startX = (SVG_W - total) / 2;
+    arr.forEach((n, i) => {
+      pos[n.id] = { x: startX + i * (NW + HGAP), y: tierYMap[+t] || 60, w: NW, h: NH };
+    });
+  });
+  return pos;
+}
+
+const hasIncoming = new Set(edges.map(e=>e.to));
+const rootIds = new Set(nodes.filter(n=>!hasIncoming.has(n.id)).map(n=>n.id));
+
+let activeFilter = 'all';
+let selected = null;
+
+function getUpstream(id) {
+  const s=new Set();
+  (function walk(nid){edges.filter(e=>e.to===nid).forEach(e=>{if(!s.has(e.from)){s.add(e.from);walk(e.from);}});})(id);
+  return s;
+}
+function getDownstream(id) {
+  const s=new Set();
+  (function walk(nid){edges.filter(e=>e.from===nid).forEach(e=>{if(!s.has(e.to)){s.add(e.to);walk(e.to);}});})(id);
+  return s;
+}
+
+function render() {
+  let visNodes = nodes;
+  if (activeFilter==='roots') visNodes = nodes.filter(n=>rootIds.has(n.id));
+  else if (activeFilter!=='all') visNodes = nodes.filter(n=>n.area===activeFilter);
+  const visIds = new Set(visNodes.map(n=>n.id));
+  const visEdges = edges.filter(e=>visIds.has(e.from)&&visIds.has(e.to));
+  const pos = computeLayout(visNodes);
+
+  let upstream=new Set(), downstream=new Set();
+  if(selected&&visIds.has(selected)){upstream=getUpstream(selected);downstream=getDownstream(selected);}
+
+  const svg = document.getElementById('flowSvg');
+
+  // Calculate height
+  const maxY = Math.max(...visNodes.map(n=>(pos[n.id]?.y||0)+NH)) + 80;
+  svg.setAttribute('viewBox',`0 0 ${SVG_W} ${maxY}`);
+
+  let html = `<defs>
+    <marker id="arrN" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#B4B2A9" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arrU" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#3B8BD4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arrD" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#D85A30" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>`;
+
+  // Tier background bands + labels — use dynamic pos to get y per tier
+  const tierGroups = {};
+  visNodes.forEach(n=>{ if(!tierGroups[n.tier]) tierGroups[n.tier]=n; });
+  Object.keys(tierGroups).sort().forEach(t => {
+    const repNode = tierGroups[+t];
+    const p = pos[repNode.id];
+    if(!p) return;
+    const y = p.y;
+    html += `<rect x="0" y="${y-32}" width="${SVG_W}" height="${NH+58}" rx="0" fill="${+t%2===0?'#fafaf8':'#f5f4f0'}" opacity="0.5"/>`;
+    html += `<text x="20" y="${y+NH/2+1}" dominant-baseline="central" font-size="11" font-weight="500" fill="#B4B2A9" font-family="'IBM Plex Mono',monospace">${tierLabels[+t]||'Tier '+t}</text>`;
+  });
+
+  // Edges
+  visEdges.forEach(e => {
+    const fp=pos[e.from], tp=pos[e.to];
+    if(!fp||!tp) return;
+    const x1=fp.x+fp.w/2, y1=fp.y+fp.h;
+    const x2=tp.x+tp.w/2, y2=tp.y;
+    const my=(y1+y2)/2;
+    let stroke='#B4B2A9', sw=0.8, op=selected?0.1:0.55, marker='arrN';
+    if(selected){
+      const fromSel = e.from===selected;
+      const toSel = e.to===selected;
+      const upPath = upstream.has(e.from)&&(upstream.has(e.to)||toSel);
+      const downPath = downstream.has(e.to)&&(downstream.has(e.from)||fromSel);
+      if(fromSel||upPath){ stroke='#3B8BD4'; sw=2; op=upPath&&!fromSel?0.5:1; marker='arrU'; }
+      else if(toSel||downPath){ stroke='#D85A30'; sw=2; op=downPath&&!toSel?0.5:1; marker='arrD'; }
+    }
+    html += `<path d="M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}" fill="none" stroke="${stroke}" stroke-width="${sw}" opacity="${op}" marker-end="url(#${marker})"/>`;
+  });
+
+  // Nodes
+  visNodes.forEach(n => {
+    const p=pos[n.id]; if(!p) return;
+    const isRoot=rootIds.has(n.id);
+    const isSel=n.id===selected;
+    const isUp=upstream.has(n.id);
+    const isDown=downstream.has(n.id);
+    const c=COLORS[n.area];
+    let fill=c.fill, stroke=c.stroke, textC=c.text, sw=0.8, op=1, fw=400;
+    if(isRoot&&!isSel&&!isUp&&!isDown){ fill='#F1EFE8'; stroke='#888780'; textC='#2C2C2A'; }
+    if(selected&&!isSel&&!isUp&&!isDown){ op=0.2; }
+    if(isSel){ sw=2.5; fw=600; }
+    const lbl = n.label.length>28 ? n.label.substring(0,27)+'…' : n.label;
+    html += `<g style="cursor:pointer;opacity:${op}" onclick="selectNode('${n.id}')">
+      <rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>
+      <text x="${p.x+p.w/2}" y="${p.y+p.h/2+0.5}" text-anchor="middle" dominant-baseline="central" fill="${textC}" font-size="12.5" font-weight="${fw}" font-family="'IBM Plex Sans',sans-serif">${lbl}</text>
+    </g>`;
+  });
+
+  svg.innerHTML = html;
+}
+
+function selectNode(id) {
+  if(selected===id){ selected=null; document.getElementById('infoPanel').innerHTML='Click any parameter node to trace its upstream causes and downstream effects.'; }
+  else {
+    selected=id;
+    const node=nodes.find(n=>n.id===id);
+    const up=[...getUpstream(id)].map(uid=>nodes.find(n=>n.id===uid)?.label).filter(Boolean).sort();
+    const down=[...getDownstream(id)].map(uid=>nodes.find(n=>n.id===uid)?.label).filter(Boolean).sort();
+    const areaLabel={extraction:'Extraction',dt:'DT',distillation:'Distillation',kpi:'Plant KPI'}[node.area];
+    let info=`<strong>${node.label}</strong> &nbsp;·&nbsp; <span style="font-size:11px;color:var(--text-secondary)">${areaLabel} · Tier ${node.tier}</span><br>`;
+    if(up.length) info+=`<span style="font-size:11.5px">↑ Upstream: </span>`+up.map(l=>`<span class="tag tag-up">${l}</span>`).join(' ');
+    else info+=`<span style="font-size:11.5px;color:var(--text-secondary)">↑ Root parameter — no upstream dependencies</span>`;
+    info+='<br>';
+    if(down.length) info+=`<span style="font-size:11.5px">↓ Affects: </span>`+down.map(l=>`<span class="tag tag-down">${l}</span>`).join(' ');
+    else info+=`<span style="font-size:11.5px;color:var(--text-secondary)">↓ No downstream effects (terminal output)</span>`;
+    document.getElementById('infoPanel').innerHTML=info;
+  }
+  render();
+}
+
+function setFilter(f, btn) {
+  activeFilter=f; selected=null;
+  document.getElementById('infoPanel').innerHTML='Click any parameter node to trace its upstream causes and downstream effects.';
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
